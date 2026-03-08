@@ -1,6 +1,6 @@
 # TRA Treasurer Assistant
 
-A web application to help Tenant and Resident Association (TRA) treasurers manage their finances. Built with Python and Flask, based on the Hammersmith & Fulham Council TRA finance training materials.
+A web application to help Tenant and Resident Association (TRA) treasurers manage their finances. Built with Python, Flask, and Uvicorn, based on the Hammersmith & Fulham Council TRA finance training materials.
 
 ## Features
 
@@ -33,6 +33,8 @@ A web application to help Tenant and Resident Association (TRA) treasurers manag
    uv run python app.py
    ```
 
+   This starts the app on Uvicorn with auto-reload enabled for development.
+
 3. **Open in your browser:**
 
    The app listens on all interfaces by default:
@@ -53,7 +55,7 @@ A web application to help Tenant and Resident Association (TRA) treasurers manag
 
 ```
 tra-web/
-├── app.py                  # Flask application (routes and views)
+├── app.py                  # Flask application (routes, views, ASGI entrypoint)
 ├── db.py                   # SQLite database module (schema and queries)
 ├── pyproject.toml          # Project config and dependencies
 ├── data/                   # Database and runtime data (created automatically)

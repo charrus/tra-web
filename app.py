@@ -591,5 +591,14 @@ def currency_filter(value):
         return "\u00a30.00"
 
 
+asgi_app = __import__("asgiref.wsgi", fromlist=["WsgiToAsgi"]).WsgiToAsgi(app)
+
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    import uvicorn
+
+    uvicorn.run(
+        "app:asgi_app",
+        host="0.0.0.0",
+        port=5000,
+        reload=True,
+    )
