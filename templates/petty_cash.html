@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Petty Cash - TRA Treasurer{% endblock %}
+{% block content %}
+<h1>Petty Cash</h1>
+
+<div class="actions">
+    <a href="{{ url_for('petty_cash_add') }}" class="btn btn-primary">+ Add Petty Cash Entry</a>
+    <form method="post" action="{{ url_for('petty_cash_reset') }}" style="display:inline"
+          onsubmit="return confirm('Reset petty cash float? This will clear all entries.')">
+        <button type="submit" class="btn btn-outline">Reset Float</button>
+    </form>
+</div>
+
+<div class="stats">
+    <div class="stat">
+        <div class="label">Float Amount</div>
+        <div class="value">{{ float_amount|currency }}</div>
+    </div>
+    <div class="stat">
+        <div class="label">Total Spent</div>
+        <div class="value negative">{{ total_spent|currency }}</div>
+    </div>
+    <div class="stat">
+        <div class="label">Remaining</div>
+        <div class="value {{ 'positive' if remaining >= 0 else 'negative' }}">{{ remaining|currency }}</div>
+    </div>
+</div>
+
+<div class="card">
+    <p style="color: var(--text-light); font-size: 0.85rem; margin-bottom: 1rem;">
+        Petty cash is a small float for day-to-day items like tea, coffee, refreshments or emergency supplies.
+        Always keep receipts for the audit trail.
+    </p>
+    <table>
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Description</th>
+                <th class="amount">Amount</th>
+                <th>Receipt?</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for item in entries %}
+        <tr>
+            <td>{{ item.date }}</td>
+            <td>{{ item.description }}</td>
+            <td class="amount">{{ item.amount|currency }}</td>
+            <td>
+                {% if item.receipt == 'Yes' %}
+                <span class="badge badge-green">Yes</span>
+                {% else %}
+                <span class="badge badge-red">No</span>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+        {% if not entries %}
+        <tr><td colspan="4" style="text-align:center; color: var(--text-light); padding: 2rem;">No petty cash entries. Float is untouched.</td></tr>
+        {% endif %}
+        {% if entries %}
+        <tr class="total">
+            <td colspan="2">Total Spent</td>
+            <td class="amount">{{ total_spent|currency }}</td>
+            <td></td>
+        </tr>
+        {% endif %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

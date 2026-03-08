@@ -1,0 +1,11 @@
+[project]
+name = "tra-treasurer"
+version = "0.1.0"
+description = "TRA Treasurer Assistant Web Application"
+requires-python = ">=3.12"
+dependencies = [
+    "flask>=3.0",
+]
+
+[tool.uv]
+dev-dependencies = []

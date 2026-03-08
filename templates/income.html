@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Income - TRA Treasurer{% endblock %}
+{% block content %}
+<h1>Income Cashbook</h1>
+
+<div class="actions">
+    <a href="{{ url_for('income_add') }}" class="btn btn-primary">+ Add Income</a>
+</div>
+
+<div class="stats">
+    <div class="stat">
+        <div class="label">Total Income</div>
+        <div class="value positive">{{ total|currency }}</div>
+    </div>
+    {% for cat, amount in category_totals.items() %}
+    <div class="stat">
+        <div class="label">{{ cat }}</div>
+        <div class="value">{{ amount|currency }}</div>
+    </div>
+    {% endfor %}
+</div>
+
+<div class="card">
+    <table>
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Description</th>
+                <th>Ref</th>
+                <th>Category</th>
+                <th>Fund Type</th>
+                <th class="amount">Amount</th>
+                <th>Status</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for item in income %}
+        <tr>
+            <td>{{ item.date }}</td>
+            <td>{{ item.description }}</td>
+            <td>{{ item.reference }}</td>
+            <td>{{ item.category }}</td>
+            <td>
+                {% if item.fund_type == 'Restricted' %}
+                <span class="badge badge-amber">Restricted</span>
+                {% else %}
+                <span class="badge badge-green">Unrestricted</span>
+                {% endif %}
+            </td>
+            <td class="amount">{{ item.amount|currency }}</td>
+            <td>
+                {% if item.reconciled %}
+                <span class="badge badge-green">Reconciled</span>
+                {% else %}
+                <span class="badge badge-amber">Pending</span>
+                {% endif %}
+            </td>
+            <td>
+                <form method="post" action="{{ url_for('income_delete', entry_id=item.id) }}" style="display:inline"
+                      onsubmit="return confirm('Delete this entry?')">
+                    <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+        {% if not income %}
+        <tr><td colspan="8" style="text-align:center; color: var(--text-light); padding: 2rem;">No income entries yet.</td></tr>
+        {% endif %}
+        {% if income %}
+        <tr class="total">
+            <td colspan="5">Total</td>
+            <td class="amount">{{ total|currency }}</td>
+            <td colspan="2"></td>
+        </tr>
+        {% endif %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

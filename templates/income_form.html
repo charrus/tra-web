@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Add Income - TRA Treasurer{% endblock %}
+{% block content %}
+<h1>Add Income Entry</h1>
+
+<div class="card" style="max-width: 600px;">
+    <form method="post">
+        <div class="form-row">
+            <div class="field">
+                <label for="date">Date</label>
+                <input type="date" id="date" name="date" required>
+            </div>
+            <div class="field">
+                <label for="reference">Reference</label>
+                <input type="text" id="reference" name="reference" placeholder="e.g. Invoice #001">
+            </div>
+        </div>
+        <div class="field">
+            <label for="description">Description</label>
+            <input type="text" id="description" name="description" required placeholder="e.g. Hall Hire Income">
+        </div>
+        <div class="form-row">
+            <div class="field">
+                <label for="amount">Amount (£)</label>
+                <input type="number" id="amount" name="amount" step="0.01" min="0" required placeholder="0.00">
+            </div>
+            <div class="field">
+                <label for="category">Category</label>
+                <select id="category" name="category" required>
+                    {% for cat in categories %}
+                    <option value="{{ cat }}">{{ cat }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <div class="field">
+            <label for="fund_type">Fund Type</label>
+            <select id="fund_type" name="fund_type">
+                {% for ft in fund_types %}
+                <option value="{{ ft }}">{{ ft }}</option>
+                {% endfor %}
+            </select>
+            <small style="color: var(--text-light);">Restricted funds (e.g. grants) must be spent on their intended purpose. Unrestricted funds can be used freely.</small>
+        </div>
+        <div class="actions">
+            <button type="submit" class="btn btn-primary">Save Income Entry</button>
+            <a href="{{ url_for('income_list') }}" class="btn btn-outline">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

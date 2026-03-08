@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}Budget - TRA Treasurer{% endblock %}
+{% block content %}
+<h1>Annual Budget vs Actuals</h1>
+
+<div class="actions">
+    <a href="{{ url_for('budget_edit') }}" class="btn btn-primary">Edit Budget</a>
+</div>
+
+<div class="stats">
+    <div class="stat">
+        <div class="label">Budgeted Income</div>
+        <div class="value">{{ budget_income_total|currency }}</div>
+    </div>
+    <div class="stat">
+        <div class="label">Actual Income</div>
+        <div class="value positive">{{ actual_income_total|currency }}</div>
+    </div>
+    <div class="stat">
+        <div class="label">Budgeted Expenditure</div>
+        <div class="value">{{ budget_expenditure_total|currency }}</div>
+    </div>
+    <div class="stat">
+        <div class="label">Actual Expenditure</div>
+        <div class="value negative">{{ actual_expenditure_total|currency }}</div>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Income</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Category</th>
+                <th class="amount">Budget</th>
+                <th class="amount">Actual</th>
+                <th class="amount">Variance</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for cat in income_categories %}
+        {% set budgeted = budget.get('income', {}).get(cat, 0)|float %}
+        {% set actual = actual_income.get(cat, 0)|float %}
+        {% set variance = actual - budgeted %}
+        <tr>
+            <td>{{ cat }}</td>
+            <td class="amount">{{ budgeted|currency }}</td>
+            <td class="amount">{{ actual|currency }}</td>
+            <td class="amount" style="color: {{ 'var(--success)' if variance >= 0 else 'var(--danger)' }}">
+                {{ variance|currency }}
+            </td>
+        </tr>
+        {% endfor %}
+        <tr class="total">
+            <td>Total</td>
+            <td class="amount">{{ budget_income_total|currency }}</td>
+            <td class="amount">{{ actual_income_total|currency }}</td>
+            <td class="amount">{{ (actual_income_total - budget_income_total)|currency }}</td>
+        </tr>
+        </tbody>
+    </table>
+</div>
+
+<div class="card">
+    <h2>Expenditure</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Category</th>
+                <th class="amount">Budget</th>
+                <th class="amount">Actual</th>
+                <th class="amount">Variance</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for cat in expenditure_categories %}
+        {% set budgeted = budget.get('expenditure', {}).get(cat, 0)|float %}
+        {% set actual = actual_expenditure.get(cat, 0)|float %}
+        {% set variance = budgeted - actual %}
+        <tr>
+            <td>{{ cat }}</td>
+            <td class="amount">{{ budgeted|currency }}</td>
+            <td class="amount">{{ actual|currency }}</td>
+            <td class="amount" style="color: {{ 'var(--success)' if variance >= 0 else 'var(--danger)' }}">
+                {{ variance|currency }}
+            </td>
+        </tr>
+        {% endfor %}
+        <tr class="total">
+            <td>Total</td>
+            <td class="amount">{{ budget_expenditure_total|currency }}</td>
+            <td class="amount">{{ actual_expenditure_total|currency }}</td>
+            <td class="amount">{{ (budget_expenditure_total - actual_expenditure_total)|currency }}</td>
+        </tr>
+        </tbody>
+    </table>
+</div>
+
+<div class="card">
+    <h2>Projected Surplus / Deficit</h2>
+    {% set budget_surplus = budget_income_total - budget_expenditure_total %}
+    {% set actual_surplus = actual_income_total - actual_expenditure_total %}
+    <table>
+        <tr><td>Budgeted Surplus</td><td class="amount" style="font-weight:700">{{ budget_surplus|currency }}</td></tr>
+        <tr><td>Actual Surplus</td><td class="amount" style="font-weight:700; color: {{ 'var(--success)' if actual_surplus >= 0 else 'var(--danger)' }}">{{ actual_surplus|currency }}</td></tr>
+    </table>
+</div>
+{% endblock %}

@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Settings - TRA Treasurer{% endblock %}
+{% block content %}
+<h1>Settings</h1>
+
+<div class="card" style="max-width: 600px;">
+    <form method="post">
+        <div class="field">
+            <label for="tra_name">TRA Name</label>
+            <input type="text" id="tra_name" name="tra_name" value="{{ settings.tra_name }}" required>
+        </div>
+        <div class="form-row">
+            <div class="field">
+                <label for="financial_year_start_month">Financial Year Start Month</label>
+                <select id="financial_year_start_month" name="financial_year_start_month">
+                    {% for i in range(12) %}
+                    <option value="{{ i + 1 }}" {{ 'selected' if settings.financial_year_start_month == i + 1 }}>
+                        {{ months[i] }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="field">
+                <label for="financial_year_start_year">Financial Year Start Year</label>
+                <input type="number" id="financial_year_start_year" name="financial_year_start_year"
+                       value="{{ settings.financial_year_start_year }}" min="2020" max="2030">
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="field">
+                <label for="opening_balance">Opening Bank Balance (£)</label>
+                <input type="number" id="opening_balance" name="opening_balance" step="0.01"
+                       value="{{ settings.get('opening_balance', 0) }}" placeholder="0.00">
+                <small style="color: var(--text-light);">Bank balance at the start of your financial year.</small>
+            </div>
+            <div class="field">
+                <label for="petty_cash_float">Petty Cash Float (£)</label>
+                <input type="number" id="petty_cash_float" name="petty_cash_float" step="0.01"
+                       value="{{ settings.get('petty_cash_float', 50) }}" placeholder="50.00">
+                <small style="color: var(--text-light);">Small amount for day-to-day expenses.</small>
+            </div>
+        </div>
+        <div class="actions">
+            <button type="submit" class="btn btn-primary">Save Settings</button>
+        </div>
+    </form>
+</div>
+{% endblock %}

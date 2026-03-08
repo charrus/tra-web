@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Add Petty Cash - TRA Treasurer{% endblock %}
+{% block content %}
+<h1>Add Petty Cash Entry</h1>
+
+<div class="card" style="max-width: 600px;">
+    <form method="post">
+        <div class="form-row">
+            <div class="field">
+                <label for="date">Date</label>
+                <input type="date" id="date" name="date" required>
+            </div>
+            <div class="field">
+                <label for="amount">Amount (£)</label>
+                <input type="number" id="amount" name="amount" step="0.01" min="0" required placeholder="0.00">
+            </div>
+        </div>
+        <div class="field">
+            <label for="description">Description</label>
+            <input type="text" id="description" name="description" required placeholder="e.g. Tea and biscuits for committee meeting">
+        </div>
+        <div class="field">
+            <label for="receipt">Receipt obtained?</label>
+            <select id="receipt" name="receipt">
+                <option value="Yes">Yes</option>
+                <option value="No">No</option>
+            </select>
+        </div>
+        <div class="actions">
+            <button type="submit" class="btn btn-primary">Save</button>
+            <a href="{{ url_for('petty_cash_list') }}" class="btn btn-outline">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

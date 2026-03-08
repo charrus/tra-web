@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Edit Budget - TRA Treasurer{% endblock %}
+{% block content %}
+<h1>Edit Annual Budget</h1>
+
+<div class="card" style="max-width: 700px;">
+    <form method="post">
+        <h2>Income Budget</h2>
+        {% for cat in income_categories %}
+        <div class="form-row">
+            <div class="field" style="display:flex; align-items:center;">
+                <label style="min-width:200px; margin:0;">{{ cat }}</label>
+            </div>
+            <div class="field">
+                <input type="number" name="income_{{ cat }}" step="0.01" min="0"
+                       value="{{ budget.get('income', {}).get(cat, 0) }}" placeholder="0.00">
+            </div>
+        </div>
+        {% endfor %}
+
+        <h2 style="margin-top: 1.5rem;">Expenditure Budget</h2>
+        {% for cat in expenditure_categories %}
+        <div class="form-row">
+            <div class="field" style="display:flex; align-items:center;">
+                <label style="min-width:200px; margin:0;">{{ cat }}</label>
+            </div>
+            <div class="field">
+                <input type="number" name="expenditure_{{ cat }}" step="0.01" min="0"
+                       value="{{ budget.get('expenditure', {}).get(cat, 0) }}" placeholder="0.00">
+            </div>
+        </div>
+        {% endfor %}
+
+        <div class="actions" style="margin-top: 1.5rem;">
+            <button type="submit" class="btn btn-primary">Save Budget</button>
+            <a href="{{ url_for('budget_view') }}" class="btn btn-outline">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

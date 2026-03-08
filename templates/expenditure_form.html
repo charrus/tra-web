@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Add Expenditure - TRA Treasurer{% endblock %}
+{% block content %}
+<h1>Add Expenditure Entry</h1>
+
+<div class="card" style="max-width: 600px;">
+    <form method="post">
+        <div class="form-row">
+            <div class="field">
+                <label for="date">Date</label>
+                <input type="date" id="date" name="date" required>
+            </div>
+            <div class="field">
+                <label for="reference">Reference</label>
+                <input type="text" id="reference" name="reference" placeholder="e.g. Invoice 33">
+            </div>
+        </div>
+        <div class="field">
+            <label for="description">Description</label>
+            <input type="text" id="description" name="description" required placeholder="e.g. Travis Perkins (locks)">
+        </div>
+        <div class="form-row">
+            <div class="field">
+                <label for="amount">Amount (£)</label>
+                <input type="number" id="amount" name="amount" step="0.01" min="0" required placeholder="0.00">
+            </div>
+            <div class="field">
+                <label for="category">Category</label>
+                <select id="category" name="category" required>
+                    {% for cat in categories %}
+                    <option value="{{ cat }}">{{ cat }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <div class="field">
+            <label for="expenditure_type">Expenditure Type</label>
+            <select id="expenditure_type" name="expenditure_type">
+                <option value="Revenue">Revenue (Running Costs)</option>
+                <option value="Capital">Capital (One-off larger items)</option>
+            </select>
+        </div>
+        <div class="actions">
+            <button type="submit" class="btn btn-primary">Save Expenditure Entry</button>
+            <a href="{{ url_for('expenditure_list') }}" class="btn btn-outline">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
