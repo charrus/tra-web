@@ -35,9 +35,10 @@ A web application to help Tenant and Resident Association (TRA) treasurers manag
 
 3. **Open in your browser:**
 
-   ```
-   http://127.0.0.1:5000
-   ```
+   The app listens on all interfaces by default:
+
+   - Local: `http://127.0.0.1:5000`
+   - Network: `http://<your-ip>:5000`
 
 4. **Log in with the default credentials:**
 
@@ -52,15 +53,15 @@ A web application to help Tenant and Resident Association (TRA) treasurers manag
 
 ```
 tra-web/
-├── app.py                  # Flask application
+├── app.py                  # Flask application (routes and views)
+├── db.py                   # SQLite database module (schema and queries)
 ├── pyproject.toml          # Project config and dependencies
-├── data/                   # JSON data files (created at runtime)
-│   ├── income.json
-│   ├── expenditure.json
-│   ├── petty_cash.json
-│   ├── budget.json
-│   ├── settings.json
-│   └── users.json
+├── data/                   # Database and runtime data (created automatically)
+│   └── tra.db              # SQLite database
+├── static/                 # Static assets served from / (favicon, PWA icons)
+│   ├── favicon.ico
+│   ├── site.webmanifest
+│   └── ...
 └── templates/
     ├── base.html           # Layout with sidebar navigation
     ├── login.html          # Login page
@@ -90,7 +91,11 @@ tra-web/
 
 ## Data Storage
 
-All data is stored as JSON files in the `data/` directory. No database setup is required. Back up this directory to preserve your financial records.
+All data is stored in a single SQLite database at `data/tra.db`. The database is created automatically on first run with WAL mode enabled for better performance. No external database setup is required.
+
+**Database tables:** `users`, `settings`, `income`, `expenditure`, `petty_cash`, `budget`
+
+To back up your data, copy the `data/tra.db` file. The `data/` directory is gitignored to keep credentials and financial records out of version control.
 
 ## Key Concepts
 
