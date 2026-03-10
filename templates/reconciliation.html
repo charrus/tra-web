@@ -1,88 +1,463 @@
 {% extends "base.html" %}
 {% block title %}Reconciliation - TRA Treasurer{% endblock %}
+{% block topbar_title %}Bank Reconciliation{% endblock %}
+{% block extra_style %}
+    .recon-btn {
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        border: 2px solid var(--border);
+        background: var(--card);
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        transition: all var(--transition);
+    }
+    .recon-btn:hover { border-color: var(--primary); background: var(--primary-bg); }
+    .recon-btn svg { width: 16px; height: 16px; opacity: 0; transition: opacity var(--transition); }
+    .recon-btn.checked {
+        border-color: var(--success);
+        background: var(--success-bg);
+    }
+    .recon-btn.checked svg { opacity: 1; color: var(--success); }
+
+    /* Upload area */
+    .upload-zone {
+        border: 2px dashed var(--border);
+        border-radius: var(--radius-lg);
+        padding: 1.75rem;
+        text-align: center;
+        transition: all var(--transition);
+        cursor: pointer;
+        position: relative;
+    }
+    .upload-zone:hover, .upload-zone.dragover {
+        border-color: var(--primary);
+        background: var(--primary-bg);
+    }
+    .upload-zone svg { width: 36px; height: 36px; color: var(--text-muted); margin-bottom: .5rem; }
+    .upload-zone p { font-size: .875rem; color: var(--text-secondary); }
+    .upload-zone small { font-size: .75rem; color: var(--text-muted); }
+    .upload-zone input[type="file"] {
+        position: absolute;
+        inset: 0;
+        opacity: 0;
+        cursor: pointer;
+    }
+
+    /* Match panel */
+    .match-panel {
+        background: var(--primary-bg);
+        border: 1px solid #c7d2fe;
+        border-radius: var(--radius);
+        padding: 1rem 1.25rem;
+        margin-bottom: .75rem;
+        animation: fadeUp .3s ease-out;
+    }
+    .match-panel h3 { font-size: .85rem; font-weight: 600; color: var(--primary-dark); margin-bottom: .5rem; }
+    .match-panel .match-details { font-size: .8rem; color: var(--text-secondary); margin-bottom: .75rem; }
+    .match-options { display: flex; flex-direction: column; gap: .35rem; max-height: 200px; overflow-y: auto; }
+    .match-option {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: .5rem .75rem;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        font-size: .8rem;
+        transition: all var(--transition);
+    }
+    .match-option:hover { border-color: var(--primary); box-shadow: var(--shadow-sm); }
+    .match-option .opt-info { flex: 1; min-width: 0; }
+    .match-option .opt-date { color: var(--text-muted); margin-right: .5rem; }
+    .match-option .opt-amount { font-weight: 600; font-variant-numeric: tabular-nums; margin: 0 .75rem; white-space: nowrap; }
+    .match-option .opt-amount.exact { color: var(--success); }
+    .match-option form { flex-shrink: 0; }
+
+    /* Bank row styling */
+    tr.matched-row { background: var(--success-bg) !important; }
+    tr.matched-row td { color: var(--text-secondary); }
+    .bank-direction {
+        display: inline-flex;
+        align-items: center;
+        gap: .25rem;
+        font-size: .75rem;
+        font-weight: 600;
+        padding: .15rem .45rem;
+        border-radius: 5px;
+    }
+    .bank-in { background: var(--success-bg); color: #065f46; }
+    .bank-out { background: var(--danger-bg); color: #991b1b; }
+
+    /* Tabs */
+    .tab-bar { display: flex; gap: .25rem; margin-bottom: 1.25rem; background: var(--border-light); padding: .25rem; border-radius: var(--radius); }
+    .tab-bar button {
+        flex: 1;
+        padding: .55rem 1rem;
+        border: none;
+        border-radius: 8px;
+        font-size: .85rem;
+        font-weight: 550;
+        font-family: inherit;
+        cursor: pointer;
+        background: transparent;
+        color: var(--text-muted);
+        transition: all var(--transition);
+    }
+    .tab-bar button:hover { color: var(--text); }
+    .tab-bar button.active { background: var(--card); color: var(--text); box-shadow: var(--shadow-sm); }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    .count-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 18px;
+        height: 18px;
+        padding: 0 5px;
+        border-radius: 9px;
+        font-size: .65rem;
+        font-weight: 700;
+        margin-left: .35rem;
+    }
+    .count-badge.warn { background: var(--warning-bg); color: #92400e; }
+    .count-badge.ok { background: var(--success-bg); color: #065f46; }
+{% endblock %}
 {% block content %}
 <h1>Bank Reconciliation</h1>
 
 <div class="stats">
-    <div class="stat">
+    <div class="stat accent-blue">
         <div class="label">Opening Balance</div>
         <div class="value">{{ opening_balance|currency }}</div>
     </div>
-    <div class="stat">
+    <div class="stat accent-green">
         <div class="label">+ Total Income</div>
         <div class="value positive">{{ total_income|currency }}</div>
     </div>
-    <div class="stat">
+    <div class="stat accent-red">
         <div class="label">- Total Expenditure</div>
         <div class="value negative">{{ total_expenditure|currency }}</div>
     </div>
-    <div class="stat">
+    <div class="stat accent-blue">
         <div class="label">= Closing Balance</div>
         <div class="value {{ 'positive' if closing_balance >= 0 else 'negative' }}">{{ closing_balance|currency }}</div>
     </div>
 </div>
 
-<div class="card">
-    <p style="color: var(--text-light); font-size: 0.85rem; margin-bottom: 1rem;">
-        Tick off each transaction against your bank statement to reconcile. This ensures your records match the bank.
-        <br>Unreconciled: <strong>{{ unreconciled_income_count }}</strong> income,
-        <strong>{{ unreconciled_expenditure_count }}</strong> expenditure items.
-    </p>
+{% if has_bank_statements %}
+<div class="stats" style="grid-template-columns: 1fr 1fr 1fr;">
+    <div class="stat accent-green">
+        <div class="label">Bank: Total In</div>
+        <div class="value positive">{{ bank_total_in|currency }}</div>
+    </div>
+    <div class="stat accent-red">
+        <div class="label">Bank: Total Out</div>
+        <div class="value negative">{{ bank_total_out|currency }}</div>
+    </div>
+    <div class="stat accent-amber">
+        <div class="label">Unmatched Transactions</div>
+        <div class="value">{{ unmatched_count }}</div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Tabs -->
+<div class="tab-bar" id="tabBar">
+    <button class="active" data-tab="bank-statement">
+        Bank Statement
+        {% if unmatched_count %}<span class="count-badge warn">{{ unmatched_count }}</span>{% endif %}
+    </button>
+    <button data-tab="cashbook">
+        Cashbook
+        {% if unreconciled_income_count + unreconciled_expenditure_count %}
+        <span class="count-badge warn">{{ unreconciled_income_count + unreconciled_expenditure_count }}</span>
+        {% endif %}
+    </button>
 </div>
 
-<div class="card">
-    <h2>Income Transactions</h2>
-    <table>
-        <thead>
-            <tr><th>Date</th><th>Description</th><th>Ref</th><th class="amount">Amount</th><th>Reconciled</th></tr>
-        </thead>
-        <tbody>
-        {% for item in income %}
-        <tr>
-            <td>{{ item.date }}</td>
-            <td>{{ item.description }}</td>
-            <td>{{ item.reference }}</td>
-            <td class="amount">{{ item.amount|currency }}</td>
-            <td>
-                <form method="post" style="display:inline">
-                    <input type="hidden" name="type" value="income">
-                    <input type="hidden" name="id" value="{{ item.id }}">
-                    <button type="submit" class="btn btn-sm {{ 'btn-primary' if item.reconciled else 'btn-outline' }}">
-                        {{ 'Reconciled' if item.reconciled else 'Mark' }}
-                    </button>
+<!-- Tab: Bank Statement -->
+<div class="tab-panel active" id="tab-bank-statement">
+
+    {% if not has_bank_statements %}
+    <div class="card">
+        <h2>Upload Bank Statement</h2>
+        <form method="post" action="{{ url_for('reconciliation_upload') }}" enctype="multipart/form-data" id="uploadForm">
+            <div class="upload-zone" id="uploadZone">
+                <input type="file" name="csv_file" accept=".csv" id="csvInput">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/></svg>
+                <p>Drop your bank CSV file here, or click to browse</p>
+                <small>Expects columns: Date, Details, Transaction Type, In, Out</small>
+            </div>
+            <div class="actions" style="margin-top: 1rem; justify-content: center;">
+                <button type="submit" class="btn btn-primary" id="uploadBtn" disabled>
+                    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" style="width:16px;height:16px"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/></svg>
+                    Upload
+                </button>
+            </div>
+        </form>
+    </div>
+    {% else %}
+
+    <div class="card">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
+            <h2 style="margin-bottom: 0;">Bank Transactions</h2>
+            <div style="display: flex; gap: .5rem;">
+                <form method="post" action="{{ url_for('reconciliation_upload') }}" enctype="multipart/form-data" style="display: inline-flex; gap: .5rem; align-items: center;">
+                    <label class="btn btn-outline btn-sm" style="cursor:pointer; margin: 0;">
+                        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+                        Add More
+                        <input type="file" name="csv_file" accept=".csv" style="display:none" onchange="this.form.submit()">
+                    </label>
                 </form>
-            </td>
-        </tr>
-        {% endfor %}
-        </tbody>
-    </table>
+                <form method="post" action="{{ url_for('reconciliation_clear') }}"
+                      onsubmit="return confirm('Clear all bank statement data? This will also unreconcile matched transactions.')">
+                    <button type="submit" class="btn btn-danger btn-sm">Clear All</button>
+                </form>
+            </div>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Details</th>
+                    <th>Type</th>
+                    <th class="amount">In</th>
+                    <th class="amount">Out</th>
+                    <th>Status</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for stmt in bank_statements %}
+            <tr class="{{ 'matched-row' if stmt.matched_id }}">
+                <td>{{ stmt.date }}</td>
+                <td>{{ stmt.details or stmt.transaction_type }}</td>
+                <td>
+                    {% if stmt.amount_in > 0 %}
+                    <span class="bank-direction bank-in">IN</span>
+                    {% else %}
+                    <span class="bank-direction bank-out">OUT</span>
+                    {% endif %}
+                </td>
+                <td class="amount">{{ stmt.amount_in|currency if stmt.amount_in > 0 else '' }}</td>
+                <td class="amount">{{ stmt.amount_out|currency if stmt.amount_out > 0 else '' }}</td>
+                <td>
+                    {% if stmt.matched_id %}
+                    <span class="badge badge-green">Matched</span>
+                    {% else %}
+                    <span class="badge badge-amber">Unmatched</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if stmt.matched_id %}
+                    <form method="post" action="{{ url_for('reconciliation_unmatch') }}" style="display:inline">
+                        <input type="hidden" name="stmt_id" value="{{ stmt.id }}">
+                        <button type="submit" class="btn btn-outline btn-sm" title="Remove match">Unmatch</button>
+                    </form>
+                    {% else %}
+                    <button type="button" class="btn btn-primary btn-sm match-trigger"
+                            data-stmt-id="{{ stmt.id }}"
+                            data-stmt-date="{{ stmt.date }}"
+                            data-stmt-details="{{ stmt.details or stmt.transaction_type }}"
+                            data-stmt-amount="{{ stmt.amount_in if stmt.amount_in > 0 else stmt.amount_out }}"
+                            data-stmt-direction="{{ 'in' if stmt.amount_in > 0 else 'out' }}">
+                        Match
+                    </button>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Match dialog (shown via JS) -->
+    <div id="matchPanel" class="match-panel" style="display: none;">
+        <h3 id="matchTitle">Match bank transaction</h3>
+        <div class="match-details" id="matchDetails"></div>
+        <div class="match-options" id="matchOptions"></div>
+        <div style="margin-top: .75rem;">
+            <button type="button" class="btn btn-outline btn-sm" onclick="closeMatchPanel()">Cancel</button>
+        </div>
+    </div>
+    {% endif %}
+
 </div>
 
-<div class="card">
-    <h2>Expenditure Transactions</h2>
-    <table>
-        <thead>
-            <tr><th>Date</th><th>Description</th><th>Ref</th><th class="amount">Amount</th><th>Reconciled</th></tr>
-        </thead>
-        <tbody>
-        {% for item in expenditure %}
-        <tr>
-            <td>{{ item.date }}</td>
-            <td>{{ item.description }}</td>
-            <td>{{ item.reference }}</td>
-            <td class="amount">{{ item.amount|currency }}</td>
-            <td>
-                <form method="post" style="display:inline">
-                    <input type="hidden" name="type" value="expenditure">
-                    <input type="hidden" name="id" value="{{ item.id }}">
-                    <button type="submit" class="btn btn-sm {{ 'btn-primary' if item.reconciled else 'btn-outline' }}">
-                        {{ 'Reconciled' if item.reconciled else 'Mark' }}
-                    </button>
-                </form>
-            </td>
-        </tr>
-        {% endfor %}
-        </tbody>
-    </table>
+<!-- Tab: Cashbook -->
+<div class="tab-panel" id="tab-cashbook">
+    <div class="card">
+        <p class="text-muted text-sm" style="margin-bottom: 1rem;">
+            Manually tick off transactions, or upload a bank statement in the Bank Statement tab to match automatically.
+            <br>Unreconciled: <strong>{{ unreconciled_income_count }}</strong> income,
+            <strong>{{ unreconciled_expenditure_count }}</strong> expenditure items.
+        </p>
+    </div>
+
+    <div class="card">
+        <h2>Income Transactions</h2>
+        <table>
+            <thead>
+                <tr><th>Date</th><th>Description</th><th>Ref</th><th class="amount">Amount</th><th style="width:60px">Reconciled</th></tr>
+            </thead>
+            <tbody>
+            {% for item in income %}
+            <tr>
+                <td>{{ item.date }}</td>
+                <td>{{ item.description }}</td>
+                <td>{{ item.reference }}</td>
+                <td class="amount">{{ item.amount|currency }}</td>
+                <td style="text-align:center">
+                    <form method="post" action="{{ url_for('reconciliation_toggle') }}" style="display:inline">
+                        <input type="hidden" name="type" value="income">
+                        <input type="hidden" name="id" value="{{ item.id }}">
+                        <button type="submit" class="recon-btn {{ 'checked' if item.reconciled }}" title="{{ 'Reconciled' if item.reconciled else 'Mark as reconciled' }}">
+                            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                        </button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="card">
+        <h2>Expenditure Transactions</h2>
+        <table>
+            <thead>
+                <tr><th>Date</th><th>Description</th><th>Ref</th><th class="amount">Amount</th><th style="width:60px">Reconciled</th></tr>
+            </thead>
+            <tbody>
+            {% for item in expenditure %}
+            <tr>
+                <td>{{ item.date }}</td>
+                <td>{{ item.description }}</td>
+                <td>{{ item.reference }}</td>
+                <td class="amount">{{ item.amount|currency }}</td>
+                <td style="text-align:center">
+                    <form method="post" action="{{ url_for('reconciliation_toggle') }}" style="display:inline">
+                        <input type="hidden" name="type" value="expenditure">
+                        <input type="hidden" name="id" value="{{ item.id }}">
+                        <button type="submit" class="recon-btn {{ 'checked' if item.reconciled }}" title="{{ 'Reconciled' if item.reconciled else 'Mark as reconciled' }}">
+                            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                        </button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
 </div>
+
+{% endblock %}
+{% block extra_script %}
+<script>
+// Tabs
+document.querySelectorAll('.tab-bar button').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-bar button').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+    });
+});
+
+// Upload zone
+const csvInput = document.getElementById('csvInput');
+const uploadBtn = document.getElementById('uploadBtn');
+const uploadZone = document.getElementById('uploadZone');
+if (csvInput) {
+    csvInput.addEventListener('change', () => {
+        if (csvInput.files.length > 0) {
+            uploadBtn.disabled = false;
+            uploadZone.querySelector('p').textContent = csvInput.files[0].name;
+        }
+    });
+}
+if (uploadZone) {
+    uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('dragover'); });
+    uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+    uploadZone.addEventListener('drop', e => {
+        e.preventDefault();
+        uploadZone.classList.remove('dragover');
+        if (e.dataTransfer.files.length > 0) {
+            csvInput.files = e.dataTransfer.files;
+            csvInput.dispatchEvent(new Event('change'));
+        }
+    });
+}
+
+// Cashbook data for matching (embedded from template)
+const cashbookIncome = [
+    {% for item in income %}{% if not item.reconciled %}
+    {id: {{ item.id }}, date: "{{ item.date }}", desc: "{{ item.description|e }}", ref: "{{ item.reference|e }}", amount: {{ item.amount }}},
+    {% endif %}{% endfor %}
+];
+const cashbookExpenditure = [
+    {% for item in expenditure %}{% if not item.reconciled %}
+    {id: {{ item.id }}, date: "{{ item.date }}", desc: "{{ item.description|e }}", ref: "{{ item.reference|e }}", amount: {{ item.amount }}},
+    {% endif %}{% endfor %}
+];
+
+function formatCurrency(v) { return '\u00a3' + v.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+
+// Match panel
+const matchPanel = document.getElementById('matchPanel');
+function closeMatchPanel() { if (matchPanel) matchPanel.style.display = 'none'; }
+
+document.querySelectorAll('.match-trigger').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const stmtId = btn.dataset.stmtId;
+        const stmtDate = btn.dataset.stmtDate;
+        const stmtDetails = btn.dataset.stmtDetails;
+        const stmtAmount = parseFloat(btn.dataset.stmtAmount);
+        const direction = btn.dataset.stmtDirection;
+
+        document.getElementById('matchTitle').textContent = 'Match: ' + stmtDetails;
+        document.getElementById('matchDetails').textContent =
+            stmtDate + ' \u2014 ' + formatCurrency(stmtAmount) + ' (' + (direction === 'in' ? 'Money In' : 'Money Out') + ')';
+
+        const candidates = direction === 'in' ? cashbookIncome : cashbookExpenditure;
+        const matchedType = direction === 'in' ? 'income' : 'expenditure';
+        const optionsDiv = document.getElementById('matchOptions');
+
+        // Sort: exact amount matches first, then closest amount
+        const sorted = [...candidates].sort((a, b) => {
+            const diffA = Math.abs(a.amount - stmtAmount);
+            const diffB = Math.abs(b.amount - stmtAmount);
+            if (diffA === 0 && diffB !== 0) return -1;
+            if (diffB === 0 && diffA !== 0) return 1;
+            return diffA - diffB;
+        });
+
+        if (sorted.length === 0) {
+            optionsDiv.innerHTML = '<p class="text-muted text-sm">No unreconciled ' + matchedType + ' entries to match against.</p>';
+        } else {
+            optionsDiv.innerHTML = sorted.map(c => {
+                const exact = Math.abs(c.amount - stmtAmount) < 0.01;
+                return '<div class="match-option">' +
+                    '<span class="opt-date">' + c.date + '</span>' +
+                    '<span class="opt-info">' + c.desc + (c.ref ? ' (' + c.ref + ')' : '') + '</span>' +
+                    '<span class="opt-amount ' + (exact ? 'exact' : '') + '">' + formatCurrency(c.amount) + '</span>' +
+                    '<form method="post" action="/reconciliation/match">' +
+                    '<input type="hidden" name="stmt_id" value="' + stmtId + '">' +
+                    '<input type="hidden" name="matched_type" value="' + matchedType + '">' +
+                    '<input type="hidden" name="matched_id" value="' + c.id + '">' +
+                    '<button type="submit" class="btn btn-primary btn-sm">' + (exact ? 'Exact Match' : 'Match') + '</button>' +
+                    '</form></div>';
+            }).join('');
+        }
+
+        matchPanel.style.display = 'block';
+        matchPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
+});
+</script>
 {% endblock %}

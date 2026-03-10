@@ -9,7 +9,7 @@ A web application to help Tenant and Resident Association (TRA) treasurers manag
 - **Expenditure Cashbook** — Record spending by category (Insurance, Printing, Activities, Cleaning, etc.) as Capital or Revenue
 - **Petty Cash** — Track a small float for day-to-day items with receipt tracking for audit trail
 - **Annual Budget** — Set budgeted amounts per category and compare against actuals with variance reporting
-- **Bank Reconciliation** — Tick off transactions against your bank statement to reconcile accounts
+- **Bank Reconciliation** — Upload bank statement CSVs (e.g. Metro Bank export) and match transactions against your cashbook, or manually tick off entries
 - **Treasurer Report** — Printable report with opening/closing balance, income/expenditure by category, cash in hand, and signature lines
 - **User Authentication** — Login system with password hashing, role-based access (admin/member), and user management
 - **Settings** — Configure TRA name, financial year, opening bank balance, and petty cash float
@@ -95,7 +95,7 @@ tra-web/
 
 All data is stored in a single SQLite database at `data/tra.db`. The database is created automatically on first run with WAL mode enabled for better performance. No external database setup is required.
 
-**Database tables:** `users`, `settings`, `income`, `expenditure`, `petty_cash`, `budget`
+**Database tables:** `users`, `settings`, `income`, `expenditure`, `petty_cash`, `budget`, `bank_statements`
 
 To back up your data, copy the `data/tra.db` file. The `data/` directory is gitignored to keep credentials and financial records out of version control.
 
@@ -106,5 +106,5 @@ These align with the H&F Council TRA finance training:
 - **Restricted Funds** — Money received for a specific purpose (e.g. council grants) that must be spent on that purpose
 - **Unrestricted Funds** — Money that can be used freely (e.g. hall hire income, donations)
 - **Capital vs Revenue** — Capital expenditure is one-off larger items; Revenue is ongoing running costs
-- **Reconciliation** — Matching your cashbook records against your bank statement
+- **Reconciliation** — Matching your cashbook records against your bank statement. Supports CSV upload (expected columns: `Date`, `Details`, `Transaction Type`, `In`, `Out` with DD/MM/YYYY dates) for side-by-side matching, or manual tick-off
 - **Dual Authorisation** — The principle that two people should authorise payments (tracked via the audit trail)

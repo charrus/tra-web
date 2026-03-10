@@ -64,6 +64,18 @@ def init_db():
             amount REAL NOT NULL DEFAULT 0,
             PRIMARY KEY (type, category)
         );
+
+        CREATE TABLE IF NOT EXISTS bank_statements (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date TEXT NOT NULL,
+            details TEXT NOT NULL DEFAULT '',
+            transaction_type TEXT NOT NULL DEFAULT '',
+            amount_in REAL NOT NULL DEFAULT 0,
+            amount_out REAL NOT NULL DEFAULT 0,
+            matched_type TEXT DEFAULT NULL,
+            matched_id INTEGER DEFAULT NULL,
+            upload_batch TEXT NOT NULL DEFAULT ''
+        );
     """)
     conn.commit()
     conn.close()
@@ -243,3 +255,66 @@ def save_budget(conn, budget):
                 (btype, category, amount),
             )
     conn.commit()
+
+
+# --- Bank Statements ---
+
+def add_bank_statement_row(conn, date, details, transaction_type, amount_in, amount_out, upload_batch):
+    conn.execute(
+        "INSERT INTO bank_statements (date, details, transaction_type, amount_in, amount_out, upload_batch) VALUES (?, ?, ?, ?, ?, ?)",
+        (date, details, transaction_type, amount_in, amount_out, upload_batch),
+    )
+
+
+def commit(conn):
+    conn.commit()
+
+
+def get_all_bank_statements(conn):
+    return rows_to_list(conn.execute("SELECT * FROM bank_statements ORDER BY date DESC, id DESC").fetchall())
+
+
+def get_unmatched_bank_statements(conn):
+    return rows_to_list(conn.execute(
+        "SELECT * FROM bank_statements WHERE matched_id IS NULL ORDER BY date, id"
+    ).fetchall())
+
+
+def match_bank_statement(conn, stmt_id, matched_type, matched_id):
+    conn.execute(
+        "UPDATE bank_statements SET matched_type = ?, matched_id = ? WHERE id = ?",
+        (matched_type, matched_id, stmt_id),
+    )
+    if matched_type == "income":
+        conn.execute("UPDATE income SET reconciled = 1 WHERE id = ?", (matched_id,))
+    elif matched_type == "expenditure":
+        conn.execute("UPDATE expenditure SET reconciled = 1 WHERE id = ?", (matched_id,))
+    conn.commit()
+
+
+def unmatch_bank_statement(conn, stmt_id):
+    row = conn.execute("SELECT matched_type, matched_id FROM bank_statements WHERE id = ?", (stmt_id,)).fetchone()
+    if row and row["matched_id"]:
+        if row["matched_type"] == "income":
+            conn.execute("UPDATE income SET reconciled = 0 WHERE id = ?", (row["matched_id"],))
+        elif row["matched_type"] == "expenditure":
+            conn.execute("UPDATE expenditure SET reconciled = 0 WHERE id = ?", (row["matched_id"],))
+    conn.execute(
+        "UPDATE bank_statements SET matched_type = NULL, matched_id = NULL WHERE id = ?",
+        (stmt_id,),
+    )
+    conn.commit()
+
+
+def clear_bank_statements(conn):
+    conn.execute("UPDATE income SET reconciled = 0 WHERE reconciled = 1 AND id IN (SELECT matched_id FROM bank_statements WHERE matched_type = 'income')")
+    conn.execute("UPDATE expenditure SET reconciled = 0 WHERE reconciled = 1 AND id IN (SELECT matched_id FROM bank_statements WHERE matched_type = 'expenditure')")
+    conn.execute("DELETE FROM bank_statements")
+    conn.commit()
+
+
+def get_upload_batches(conn):
+    rows = conn.execute(
+        "SELECT upload_batch, COUNT(*) as count, MIN(date) as min_date, MAX(date) as max_date FROM bank_statements GROUP BY upload_batch ORDER BY upload_batch DESC"
+    ).fetchall()
+    return rows_to_list(rows)

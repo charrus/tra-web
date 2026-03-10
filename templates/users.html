@@ -1,10 +1,14 @@
 {% extends "base.html" %}
 {% block title %}Users - TRA Treasurer{% endblock %}
+{% block topbar_title %}Users{% endblock %}
 {% block content %}
 <h1>Manage Users</h1>
 
 <div class="actions">
-    <a href="{{ url_for('user_add') }}" class="btn btn-primary">+ Add User</a>
+    <a href="{{ url_for('user_add') }}" class="btn btn-primary">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+        Add User
+    </a>
 </div>
 
 <div class="card">
@@ -36,7 +40,7 @@
                     <button type="submit" class="btn btn-danger btn-sm">Delete</button>
                 </form>
                 {% else %}
-                <span style="color: var(--text-light); font-size: 0.8rem;">(you)</span>
+                <span class="text-muted" style="font-size: .78rem;">(you)</span>
                 {% endif %}
             </td>
         </tr>

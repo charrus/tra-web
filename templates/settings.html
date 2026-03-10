@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Settings - TRA Treasurer{% endblock %}
+{% block topbar_title %}Settings{% endblock %}
 {% block content %}
 <h1>Settings</h1>
 
@@ -28,16 +29,16 @@
         </div>
         <div class="form-row">
             <div class="field">
-                <label for="opening_balance">Opening Bank Balance (£)</label>
+                <label for="opening_balance">Opening Bank Balance (&pound;)</label>
                 <input type="number" id="opening_balance" name="opening_balance" step="0.01"
                        value="{{ settings.get('opening_balance', 0) }}" placeholder="0.00">
-                <small style="color: var(--text-light);">Bank balance at the start of your financial year.</small>
+                <small>Bank balance at the start of your financial year.</small>
             </div>
             <div class="field">
-                <label for="petty_cash_float">Petty Cash Float (£)</label>
+                <label for="petty_cash_float">Petty Cash Float (&pound;)</label>
                 <input type="number" id="petty_cash_float" name="petty_cash_float" step="0.01"
                        value="{{ settings.get('petty_cash_float', 50) }}" placeholder="50.00">
-                <small style="color: var(--text-light);">Small amount for day-to-day expenses.</small>
+                <small>Small amount for day-to-day expenses.</small>
             </div>
         </div>
         <div class="actions">

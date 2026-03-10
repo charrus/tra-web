@@ -1,14 +1,18 @@
 {% extends "base.html" %}
 {% block title %}Expenditure - TRA Treasurer{% endblock %}
+{% block topbar_title %}Expenditure Cashbook{% endblock %}
 {% block content %}
 <h1>Expenditure Cashbook</h1>
 
 <div class="actions">
-    <a href="{{ url_for('expenditure_add') }}" class="btn btn-primary">+ Add Expenditure</a>
+    <a href="{{ url_for('expenditure_add') }}" class="btn btn-primary">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+        Add Expenditure
+    </a>
 </div>
 
 <div class="stats">
-    <div class="stat">
+    <div class="stat accent-red">
         <div class="label">Total Expenditure</div>
         <div class="value negative">{{ total|currency }}</div>
     </div>
@@ -59,7 +63,11 @@
         </tr>
         {% endfor %}
         {% if not expenditure %}
-        <tr><td colspan="8" style="text-align:center; color: var(--text-light); padding: 2rem;">No expenditure entries yet.</td></tr>
+        <tr><td colspan="8">
+            <div class="empty-state">
+                <p>No expenditure entries yet.</p>
+            </div>
+        </td></tr>
         {% endif %}
         {% if expenditure %}
         <tr class="total">

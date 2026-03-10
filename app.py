@@ -1,5 +1,7 @@
+import csv
+import io
 import os
-from datetime import date
+from datetime import date, datetime
 from functools import wraps
 
 from flask import Flask, render_template, request, redirect, url_for, flash, session, g
@@ -467,42 +469,165 @@ def budget_edit():
 # --- Reconciliation ---
 
 
-@app.route("/reconciliation", methods=["GET", "POST"])
+def parse_bank_csv(file_content):
+    """Parse a bank CSV export. Expects columns: Date, Details, Transaction Type, In, Out.
+    Date format: DD/MM/YYYY. Returns list of dicts."""
+    rows = []
+    reader = csv.DictReader(io.StringIO(file_content))
+    for row in reader:
+        date_str = row.get("Date", "").strip()
+        if not date_str:
+            continue
+        try:
+            parsed = datetime.strptime(date_str, "%d/%m/%Y")
+            iso_date = parsed.strftime("%Y-%m-%d")
+        except ValueError:
+            iso_date = date_str
+        amount_in = 0.0
+        amount_out = 0.0
+        in_val = row.get("In", "").strip()
+        out_val = row.get("Out", "").strip()
+        if in_val:
+            amount_in = round(float(in_val.replace(",", "")), 2)
+        if out_val:
+            amount_out = round(float(out_val.replace(",", "")), 2)
+        rows.append({
+            "date": iso_date,
+            "details": row.get("Details", "").strip(),
+            "transaction_type": row.get("Transaction Type", "").strip(),
+            "amount_in": amount_in,
+            "amount_out": amount_out,
+        })
+    return rows
+
+
+@app.route("/reconciliation")
 @login_required
 def reconciliation():
     conn = get_conn()
-    if request.method == "POST":
-        entry_type = request.form.get("type")
-        entry_id = int(request.form.get("id"))
-        if entry_type == "income":
-            db.toggle_income_reconciled(conn, entry_id)
-        elif entry_type == "expenditure":
-            db.toggle_expenditure_reconciled(conn, entry_id)
-        return redirect(url_for("reconciliation"))
-
     income = db.get_all_income(conn)
     expenditure = db.get_all_expenditure(conn)
     settings = db.get_settings(conn)
+    bank_statements = db.get_all_bank_statements(conn)
 
     opening_balance = float(settings.get("opening_balance", 0))
     total_income = sum(i["amount"] for i in income)
     total_expenditure = sum(e["amount"] for e in expenditure)
     closing_balance = opening_balance + total_income - total_expenditure
 
+    bank_total_in = sum(s["amount_in"] for s in bank_statements)
+    bank_total_out = sum(s["amount_out"] for s in bank_statements)
+
     unreconciled_income = [i for i in income if not i.get("reconciled")]
     unreconciled_expenditure = [e for e in expenditure if not e.get("reconciled")]
+    unmatched_statements = [s for s in bank_statements if not s.get("matched_id")]
+
+    # Build lookup of matched statement IDs for display
+    matched_by_income = {}
+    matched_by_expenditure = {}
+    for s in bank_statements:
+        if s.get("matched_type") == "income" and s.get("matched_id"):
+            matched_by_income[s["matched_id"]] = s
+        elif s.get("matched_type") == "expenditure" and s.get("matched_id"):
+            matched_by_expenditure[s["matched_id"]] = s
 
     return render_template(
         "reconciliation.html",
         income=sorted(income, key=lambda x: x["date"]),
         expenditure=sorted(expenditure, key=lambda x: x["date"]),
+        bank_statements=sorted(bank_statements, key=lambda x: x["date"]),
         opening_balance=opening_balance,
         total_income=total_income,
         total_expenditure=total_expenditure,
         closing_balance=closing_balance,
+        bank_total_in=bank_total_in,
+        bank_total_out=bank_total_out,
         unreconciled_income_count=len(unreconciled_income),
         unreconciled_expenditure_count=len(unreconciled_expenditure),
+        unmatched_count=len(unmatched_statements),
+        has_bank_statements=len(bank_statements) > 0,
+        matched_by_income=matched_by_income,
+        matched_by_expenditure=matched_by_expenditure,
     )
+
+
+@app.route("/reconciliation/toggle", methods=["POST"])
+@login_required
+def reconciliation_toggle():
+    conn = get_conn()
+    entry_type = request.form.get("type")
+    entry_id = int(request.form.get("id"))
+    if entry_type == "income":
+        db.toggle_income_reconciled(conn, entry_id)
+    elif entry_type == "expenditure":
+        db.toggle_expenditure_reconciled(conn, entry_id)
+    return redirect(url_for("reconciliation"))
+
+
+@app.route("/reconciliation/upload", methods=["POST"])
+@login_required
+def reconciliation_upload():
+    conn = get_conn()
+    file = request.files.get("csv_file")
+    if not file or not file.filename:
+        flash("Please select a CSV file to upload.", "error")
+        return redirect(url_for("reconciliation"))
+
+    if not file.filename.lower().endswith(".csv"):
+        flash("Only CSV files are supported.", "error")
+        return redirect(url_for("reconciliation"))
+
+    try:
+        content = file.read().decode("utf-8-sig")
+        rows = parse_bank_csv(content)
+    except Exception as e:
+        flash(f"Error parsing CSV: {e}", "error")
+        return redirect(url_for("reconciliation"))
+
+    if not rows:
+        flash("No valid rows found in the CSV file.", "error")
+        return redirect(url_for("reconciliation"))
+
+    batch_id = datetime.now().strftime("%Y%m%d-%H%M%S")
+    for row in rows:
+        db.add_bank_statement_row(
+            conn, row["date"], row["details"], row["transaction_type"],
+            row["amount_in"], row["amount_out"], batch_id,
+        )
+    db.commit(conn)
+
+    flash(f"Uploaded {len(rows)} bank transactions.", "success")
+    return redirect(url_for("reconciliation"))
+
+
+@app.route("/reconciliation/match", methods=["POST"])
+@login_required
+def reconciliation_match():
+    conn = get_conn()
+    stmt_id = int(request.form.get("stmt_id"))
+    matched_type = request.form.get("matched_type")
+    matched_id = int(request.form.get("matched_id"))
+    db.match_bank_statement(conn, stmt_id, matched_type, matched_id)
+    flash("Transaction matched and reconciled.", "success")
+    return redirect(url_for("reconciliation"))
+
+
+@app.route("/reconciliation/unmatch", methods=["POST"])
+@login_required
+def reconciliation_unmatch():
+    conn = get_conn()
+    stmt_id = int(request.form.get("stmt_id"))
+    db.unmatch_bank_statement(conn, stmt_id)
+    flash("Match removed.", "success")
+    return redirect(url_for("reconciliation"))
+
+
+@app.route("/reconciliation/clear", methods=["POST"])
+@login_required
+def reconciliation_clear():
+    db.clear_bank_statements(get_conn())
+    flash("Bank statement data cleared.", "success")
+    return redirect(url_for("reconciliation"))
 
 
 # --- Treasurer Report ---
