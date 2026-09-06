@@ -184,6 +184,7 @@ def add_income(conn, date, description, reference, amount, category, fund_type):
 
 
 def delete_income(conn, entry_id):
+    _release_bank_matches(conn, "income", entry_id)
     conn.execute("DELETE FROM income WHERE id = ?", (entry_id,))
     conn.commit()
 
@@ -208,6 +209,7 @@ def add_expenditure(conn, date, description, reference, amount, category, expend
 
 
 def delete_expenditure(conn, entry_id):
+    _release_bank_matches(conn, "expenditure", entry_id)
     conn.execute("DELETE FROM expenditure WHERE id = ?", (entry_id,))
     conn.commit()
 
@@ -259,6 +261,67 @@ def save_budget(conn, budget):
 
 # --- Bank Statements ---
 
+# Entry types a bank statement may be matched against, mapped to their table.
+# Used to keep table names out of string-formatted SQL.
+ENTRY_TABLES = {"income": "income", "expenditure": "expenditure"}
+
+
+def entry_exists(conn, entry_type, entry_id):
+    table = ENTRY_TABLES.get(entry_type)
+    if table is None:
+        return False
+    row = conn.execute(f"SELECT 1 FROM {table} WHERE id = ?", (entry_id,)).fetchone()
+    return row is not None
+
+
+def bank_statement_exists(conn, stmt_id):
+    row = conn.execute("SELECT 1 FROM bank_statements WHERE id = ?", (stmt_id,)).fetchone()
+    return row is not None
+
+
+def bank_match_for(conn, entry_type, entry_id):
+    """Return the bank statement currently matched to a cashbook entry, or None."""
+    row = conn.execute(
+        "SELECT * FROM bank_statements WHERE matched_type = ? AND matched_id = ?",
+        (entry_type, entry_id),
+    ).fetchone()
+    return row_to_dict(row)
+
+
+def bank_statement_row_count(conn, date, details, transaction_type, amount_in, amount_out):
+    """How many identical rows are already stored. A statement may legitimately contain
+    the same transaction twice in a day, so duplicate detection compares counts."""
+    return conn.execute(
+        "SELECT COUNT(*) FROM bank_statements WHERE date = ? AND details = ? AND transaction_type = ?"
+        " AND amount_in = ? AND amount_out = ?",
+        (date, details, transaction_type, amount_in, amount_out),
+    ).fetchone()[0]
+
+
+def _release_bank_matches(conn, entry_type, entry_id):
+    """Clear any bank statement match pointing at a cashbook entry. Does not commit."""
+    conn.execute(
+        "UPDATE bank_statements SET matched_type = NULL, matched_id = NULL"
+        " WHERE matched_type = ? AND matched_id = ?",
+        (entry_type, entry_id),
+    )
+
+
+def _clear_match(conn, stmt_id):
+    """Unreconcile whatever a statement points at and clear the match. Does not commit."""
+    row = conn.execute(
+        "SELECT matched_type, matched_id FROM bank_statements WHERE id = ?", (stmt_id,)
+    ).fetchone()
+    if row and row["matched_id"]:
+        table = ENTRY_TABLES.get(row["matched_type"])
+        if table is not None:
+            conn.execute(f"UPDATE {table} SET reconciled = 0 WHERE id = ?", (row["matched_id"],))
+    conn.execute(
+        "UPDATE bank_statements SET matched_type = NULL, matched_id = NULL WHERE id = ?",
+        (stmt_id,),
+    )
+
+
 def add_bank_statement_row(conn, date, details, transaction_type, amount_in, amount_out, upload_batch):
     conn.execute(
         "INSERT INTO bank_statements (date, details, transaction_type, amount_in, amount_out, upload_batch) VALUES (?, ?, ?, ?, ?, ?)",
@@ -274,35 +337,30 @@ def get_all_bank_statements(conn):
     return rows_to_list(conn.execute("SELECT * FROM bank_statements ORDER BY date DESC, id DESC").fetchall())
 
 
-def get_unmatched_bank_statements(conn):
-    return rows_to_list(conn.execute(
-        "SELECT * FROM bank_statements WHERE matched_id IS NULL ORDER BY date, id"
-    ).fetchall())
-
-
 def match_bank_statement(conn, stmt_id, matched_type, matched_id):
+    table = ENTRY_TABLES.get(matched_type)
+    if table is None:
+        return False
+    # Release any entry this statement was previously matched to.
+    _clear_match(conn, stmt_id)
+    # A cashbook entry may have at most one bank statement match.
+    previous = conn.execute(
+        "SELECT id FROM bank_statements WHERE matched_type = ? AND matched_id = ? AND id != ?",
+        (matched_type, matched_id, stmt_id),
+    ).fetchall()
+    for row in previous:
+        _clear_match(conn, row["id"])
     conn.execute(
         "UPDATE bank_statements SET matched_type = ?, matched_id = ? WHERE id = ?",
         (matched_type, matched_id, stmt_id),
     )
-    if matched_type == "income":
-        conn.execute("UPDATE income SET reconciled = 1 WHERE id = ?", (matched_id,))
-    elif matched_type == "expenditure":
-        conn.execute("UPDATE expenditure SET reconciled = 1 WHERE id = ?", (matched_id,))
+    conn.execute(f"UPDATE {table} SET reconciled = 1 WHERE id = ?", (matched_id,))
     conn.commit()
+    return True
 
 
 def unmatch_bank_statement(conn, stmt_id):
-    row = conn.execute("SELECT matched_type, matched_id FROM bank_statements WHERE id = ?", (stmt_id,)).fetchone()
-    if row and row["matched_id"]:
-        if row["matched_type"] == "income":
-            conn.execute("UPDATE income SET reconciled = 0 WHERE id = ?", (row["matched_id"],))
-        elif row["matched_type"] == "expenditure":
-            conn.execute("UPDATE expenditure SET reconciled = 0 WHERE id = ?", (row["matched_id"],))
-    conn.execute(
-        "UPDATE bank_statements SET matched_type = NULL, matched_id = NULL WHERE id = ?",
-        (stmt_id,),
-    )
+    _clear_match(conn, stmt_id)
     conn.commit()
 
 
@@ -311,10 +369,3 @@ def clear_bank_statements(conn):
     conn.execute("UPDATE expenditure SET reconciled = 0 WHERE reconciled = 1 AND id IN (SELECT matched_id FROM bank_statements WHERE matched_type = 'expenditure')")
     conn.execute("DELETE FROM bank_statements")
     conn.commit()
-
-
-def get_upload_batches(conn):
-    rows = conn.execute(
-        "SELECT upload_batch, COUNT(*) as count, MIN(date) as min_date, MAX(date) as max_date FROM bank_statements GROUP BY upload_batch ORDER BY upload_batch DESC"
-    ).fetchall()
-    return rows_to_list(rows)

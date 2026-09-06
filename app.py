@@ -1,6 +1,8 @@
 import csv
 import io
 import os
+import math
+import secrets
 from datetime import date, datetime
 from functools import wraps
 
@@ -10,7 +12,12 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import db
 
 app = Flask(__name__, static_url_path="", static_folder="static")
-app.secret_key = os.environ.get("SECRET_KEY", "tra-treasurer-secret-key-change-in-production")
+app.secret_key = os.environ.get("SECRET_KEY") or secrets.token_hex(32)
+
+MAX_UPLOAD_MB = 5
+app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_MB * 1024 * 1024
+# Blocks cross-site form POSTs from reaching the destructive reconciliation routes.
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
 # Initialise database on startup
 db.init_db()
@@ -68,7 +75,9 @@ def login():
             session["user_role"] = user.get("role", "member")
             flash(f"Welcome, {user.get('name', username)}!", "success")
             next_url = request.args.get("next")
-            return redirect(next_url or url_for("dashboard"))
+            if next_url and next_url.startswith("/") and not next_url.startswith("//"):
+                return redirect(next_url)
+            return redirect(url_for("dashboard"))
         flash("Invalid username or password.", "error")
     return render_template("login.html")
 
@@ -160,22 +169,33 @@ def get_financial_year_dates(settings):
     start_month = settings.get("financial_year_start_month", 4)
     start_year = settings.get("financial_year_start_year", 2025)
     start = date(start_year, start_month, 1)
-    if start_month == 1:
-        end = date(start_year, 12, 31)
-    else:
-        end = date(start_year + 1, start_month - 1, 28)
-        if start_month - 1 in (1, 3, 5, 7, 8, 10, 12):
-            end = end.replace(day=31)
-        elif start_month - 1 == 2:
-            end = end.replace(day=28)
-        else:
-            end = end.replace(day=30)
+    next_start = date(start_year + 1, start_month, 1)
+    end = next_start.replace(day=1) - __import__('datetime').timedelta(days=1)
     return start, end
 
 
 def parse_amount(value):
     cleaned = value.strip().replace("\u00a3", "").replace(",", "")
-    return round(float(cleaned), 2)
+    amount = round(float(cleaned), 2)
+    if not math.isfinite(amount):
+        raise ValueError("amount must be a finite number")
+    return amount
+
+
+def in_financial_year(entry_date, start, end):
+    try:
+        d = date.fromisoformat(entry_date)
+    except (TypeError, ValueError):
+        return False
+    return start <= d <= end
+
+
+def form_int(name):
+    """Read an integer form field. Returns None if missing or not a number."""
+    try:
+        return int(request.form.get(name, ""))
+    except (TypeError, ValueError):
+        return None
 
 
 INCOME_CATEGORIES = [
@@ -400,6 +420,9 @@ def budget_view():
     budget = db.get_budget(conn)
     income = db.get_all_income(conn)
     expenditure = db.get_all_expenditure(conn)
+    fy_start, fy_end = get_financial_year_dates(db.get_settings(conn))
+    income = [i for i in income if in_financial_year(i.get("date"), fy_start, fy_end)]
+    expenditure = [e for e in expenditure if in_financial_year(e.get("date"), fy_start, fy_end)]
 
     if not budget["income"] and not budget["expenditure"]:
         budget = {
@@ -469,36 +492,64 @@ def budget_edit():
 # --- Reconciliation ---
 
 
+DATE_FORMATS = ("%d/%m/%Y", "%Y-%m-%d")
+
+
+def field(row, name):
+    """Read a CSV column. DictReader short-fills truncated rows with None, not ''."""
+    return (row.get(name) or "").strip()
+
+
+def parse_bank_date(date_str):
+    for fmt in DATE_FORMATS:
+        try:
+            return datetime.strptime(date_str, fmt).strftime("%Y-%m-%d")
+        except ValueError:
+            continue
+    raise ValueError(f"unrecognised date {date_str!r} (expected DD/MM/YYYY)")
+
+
 def parse_bank_csv(file_content):
     """Parse a bank CSV export. Expects columns: Date, Details, Transaction Type, In, Out.
-    Date format: DD/MM/YYYY. Returns list of dicts."""
+    Date format: DD/MM/YYYY (or YYYY-MM-DD). Returns list of dicts.
+    Raises ValueError naming the offending row if a date or amount cannot be read."""
     rows = []
     reader = csv.DictReader(io.StringIO(file_content))
     for row in reader:
-        date_str = row.get("Date", "").strip()
+        date_str = field(row, "Date")
         if not date_str:
             continue
         try:
-            parsed = datetime.strptime(date_str, "%d/%m/%Y")
-            iso_date = parsed.strftime("%Y-%m-%d")
-        except ValueError:
-            iso_date = date_str
-        amount_in = 0.0
-        amount_out = 0.0
-        in_val = row.get("In", "").strip()
-        out_val = row.get("Out", "").strip()
-        if in_val:
-            amount_in = round(float(in_val.replace(",", "")), 2)
-        if out_val:
-            amount_out = round(float(out_val.replace(",", "")), 2)
+            iso_date = parse_bank_date(date_str)
+            # Banks vary on whether the Out column is signed; store magnitudes.
+            in_val = field(row, "In")
+            out_val = field(row, "Out")
+            amount_in = abs(parse_amount(in_val)) if in_val else 0.0
+            amount_out = abs(parse_amount(out_val)) if out_val else 0.0
+        except ValueError as e:
+            raise ValueError(f"row {reader.line_num}: {e}") from e
         rows.append({
             "date": iso_date,
-            "details": row.get("Details", "").strip(),
-            "transaction_type": row.get("Transaction Type", "").strip(),
+            "details": field(row, "Details"),
+            "transaction_type": field(row, "Transaction Type"),
             "amount_in": amount_in,
             "amount_out": amount_out,
         })
     return rows
+
+
+def match_candidates(entries):
+    """Trim cashbook entries to the fields the match panel needs."""
+    return [
+        {
+            "id": e["id"],
+            "date": e["date"],
+            "desc": e.get("description", ""),
+            "ref": e.get("reference", ""),
+            "amount": e["amount"],
+        }
+        for e in entries
+    ]
 
 
 @app.route("/reconciliation")
@@ -522,15 +573,6 @@ def reconciliation():
     unreconciled_expenditure = [e for e in expenditure if not e.get("reconciled")]
     unmatched_statements = [s for s in bank_statements if not s.get("matched_id")]
 
-    # Build lookup of matched statement IDs for display
-    matched_by_income = {}
-    matched_by_expenditure = {}
-    for s in bank_statements:
-        if s.get("matched_type") == "income" and s.get("matched_id"):
-            matched_by_income[s["matched_id"]] = s
-        elif s.get("matched_type") == "expenditure" and s.get("matched_id"):
-            matched_by_expenditure[s["matched_id"]] = s
-
     return render_template(
         "reconciliation.html",
         income=sorted(income, key=lambda x: x["date"]),
@@ -546,8 +588,8 @@ def reconciliation():
         unreconciled_expenditure_count=len(unreconciled_expenditure),
         unmatched_count=len(unmatched_statements),
         has_bank_statements=len(bank_statements) > 0,
-        matched_by_income=matched_by_income,
-        matched_by_expenditure=matched_by_expenditure,
+        cashbook_income=match_candidates(unreconciled_income),
+        cashbook_expenditure=match_candidates(unreconciled_expenditure),
     )
 
 
@@ -556,10 +598,18 @@ def reconciliation():
 def reconciliation_toggle():
     conn = get_conn()
     entry_type = request.form.get("type")
-    entry_id = int(request.form.get("id"))
-    if entry_type == "income":
+    entry_id = form_int("id")
+    if entry_type not in db.ENTRY_TABLES or entry_id is None:
+        flash("Invalid transaction.", "error")
+    elif db.bank_match_for(conn, entry_type, entry_id):
+        flash(
+            "This entry is matched to a bank transaction. "
+            "Use Unmatch on the Bank Statement tab to release it.",
+            "error",
+        )
+    elif entry_type == "income":
         db.toggle_income_reconciled(conn, entry_id)
-    elif entry_type == "expenditure":
+    else:
         db.toggle_expenditure_reconciled(conn, entry_id)
     return redirect(url_for("reconciliation"))
 
@@ -589,14 +639,31 @@ def reconciliation_upload():
         return redirect(url_for("reconciliation"))
 
     batch_id = datetime.now().strftime("%Y%m%d-%H%M%S")
+    added = 0
+    skipped = 0
+    # Skip rows already stored, but keep genuine repeats within one statement: each
+    # identical row already held absorbs one occurrence in the file, and only the
+    # occurrences beyond that are new.
+    already_held = {}
     for row in rows:
-        db.add_bank_statement_row(
-            conn, row["date"], row["details"], row["transaction_type"],
-            row["amount_in"], row["amount_out"], batch_id,
+        signature = (
+            row["date"], row["details"], row["transaction_type"],
+            row["amount_in"], row["amount_out"],
         )
+        if signature not in already_held:
+            already_held[signature] = db.bank_statement_row_count(conn, *signature)
+        if already_held[signature] > 0:
+            already_held[signature] -= 1
+            skipped += 1
+            continue
+        db.add_bank_statement_row(conn, *signature, batch_id)
+        added += 1
     db.commit(conn)
 
-    flash(f"Uploaded {len(rows)} bank transactions.", "success")
+    message = f"Uploaded {added} bank transactions."
+    if skipped:
+        message += f" Skipped {skipped} already present."
+    flash(message, "success" if added else "error")
     return redirect(url_for("reconciliation"))
 
 
@@ -604,11 +671,19 @@ def reconciliation_upload():
 @login_required
 def reconciliation_match():
     conn = get_conn()
-    stmt_id = int(request.form.get("stmt_id"))
+    stmt_id = form_int("stmt_id")
     matched_type = request.form.get("matched_type")
-    matched_id = int(request.form.get("matched_id"))
-    db.match_bank_statement(conn, stmt_id, matched_type, matched_id)
-    flash("Transaction matched and reconciled.", "success")
+    matched_id = form_int("matched_id")
+
+    if stmt_id is None or matched_id is None or matched_type not in db.ENTRY_TABLES:
+        flash("Invalid match request.", "error")
+    elif not db.bank_statement_exists(conn, stmt_id):
+        flash("That bank transaction no longer exists.", "error")
+    elif not db.entry_exists(conn, matched_type, matched_id):
+        flash("That cashbook entry no longer exists.", "error")
+    else:
+        db.match_bank_statement(conn, stmt_id, matched_type, matched_id)
+        flash("Transaction matched and reconciled.", "success")
     return redirect(url_for("reconciliation"))
 
 
@@ -616,9 +691,12 @@ def reconciliation_match():
 @login_required
 def reconciliation_unmatch():
     conn = get_conn()
-    stmt_id = int(request.form.get("stmt_id"))
-    db.unmatch_bank_statement(conn, stmt_id)
-    flash("Match removed.", "success")
+    stmt_id = form_int("stmt_id")
+    if stmt_id is None:
+        flash("Invalid transaction.", "error")
+    else:
+        db.unmatch_bank_statement(conn, stmt_id)
+        flash("Match removed.", "success")
     return redirect(url_for("reconciliation"))
 
 
@@ -641,6 +719,10 @@ def treasurer_report():
     income = db.get_all_income(conn)
     expenditure = db.get_all_expenditure(conn)
     petty_cash = db.get_all_petty_cash(conn)
+    fy_start, fy_end = get_financial_year_dates(settings)
+    income = [i for i in income if in_financial_year(i.get("date"), fy_start, fy_end)]
+    expenditure = [e for e in expenditure if in_financial_year(e.get("date"), fy_start, fy_end)]
+    petty_cash = [p for p in petty_cash if in_financial_year(p.get("date"), fy_start, fy_end)]
 
     opening_balance = float(settings.get("opening_balance", 0))
     total_income = sum(i["amount"] for i in income)
@@ -659,8 +741,6 @@ def treasurer_report():
     for e in expenditure:
         cat = e.get("category", "Other")
         exp_by_cat[cat] = exp_by_cat.get(cat, 0) + e["amount"]
-
-    fy_start, fy_end = get_financial_year_dates(settings)
 
     return render_template(
         "report.html",
@@ -687,13 +767,21 @@ def treasurer_report():
 def settings_page():
     conn = get_conn()
     if request.method == "POST":
-        settings = {
+        try:
+            month = int(request.form.get("financial_year_start_month", "4"))
+            year = int(request.form.get("financial_year_start_year", "2025"))
+            if not 1 <= month <= 12 or not 1900 <= year <= 2200:
+                raise ValueError
+            settings = {
             "tra_name": request.form.get("tra_name", "My TRA"),
-            "financial_year_start_month": request.form.get("financial_year_start_month", "4"),
-            "financial_year_start_year": request.form.get("financial_year_start_year", "2025"),
+            "financial_year_start_month": month,
+            "financial_year_start_year": year,
             "opening_balance": str(parse_amount(request.form.get("opening_balance", "0"))),
             "petty_cash_float": str(parse_amount(request.form.get("petty_cash_float", "50"))),
-        }
+            }
+        except (TypeError, ValueError):
+            flash("Please enter valid financial year and amount settings.", "error")
+            return redirect(url_for("settings_page"))
         db.save_settings(conn, settings)
         flash("Settings saved.", "success")
         return redirect(url_for("settings_page"))
@@ -706,6 +794,14 @@ def settings_page():
 
 
 # --- Template filters ---
+
+
+@app.errorhandler(413)
+def file_too_large(e):
+    # Redirect rather than returning 413: browsers do not follow a redirect on an
+    # error status, and the flash message is what tells the user what went wrong.
+    flash(f"That file is too large (maximum {MAX_UPLOAD_MB} MB).", "error")
+    return redirect(url_for("reconciliation"))
 
 
 @app.template_filter("currency")

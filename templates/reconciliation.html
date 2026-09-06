@@ -395,18 +395,25 @@ if (uploadZone) {
 }
 
 // Cashbook data for matching (embedded from template)
-const cashbookIncome = [
-    {% for item in income %}{% if not item.reconciled %}
-    {id: {{ item.id }}, date: "{{ item.date }}", desc: "{{ item.description|e }}", ref: "{{ item.reference|e }}", amount: {{ item.amount }}},
-    {% endif %}{% endfor %}
-];
-const cashbookExpenditure = [
-    {% for item in expenditure %}{% if not item.reconciled %}
-    {id: {{ item.id }}, date: "{{ item.date }}", desc: "{{ item.description|e }}", ref: "{{ item.reference|e }}", amount: {{ item.amount }}},
-    {% endif %}{% endfor %}
-];
+const cashbookIncome = {{ cashbook_income|tojson }};
+const cashbookExpenditure = {{ cashbook_expenditure|tojson }};
 
 function formatCurrency(v) { return '\u00a3' + v.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+
+function el(tag, className, text) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+}
+
+function hiddenInput(name, value) {
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = name;
+    input.value = value;
+    return input;
+}
 
 // Match panel
 const matchPanel = document.getElementById('matchPanel');
@@ -437,22 +444,38 @@ document.querySelectorAll('.match-trigger').forEach(btn => {
             return diffA - diffB;
         });
 
+        optionsDiv.textContent = '';
         if (sorted.length === 0) {
-            optionsDiv.innerHTML = '<p class="text-muted text-sm">No unreconciled ' + matchedType + ' entries to match against.</p>';
+            const empty = document.createElement('p');
+            empty.className = 'text-muted text-sm';
+            empty.textContent = 'No unreconciled ' + matchedType + ' entries to match against.';
+            optionsDiv.appendChild(empty);
         } else {
-            optionsDiv.innerHTML = sorted.map(c => {
+            // Built with DOM APIs rather than innerHTML: descriptions and references are
+            // unescaped user input and must never be parsed as markup.
+            sorted.forEach(c => {
                 const exact = Math.abs(c.amount - stmtAmount) < 0.01;
-                return '<div class="match-option">' +
-                    '<span class="opt-date">' + c.date + '</span>' +
-                    '<span class="opt-info">' + c.desc + (c.ref ? ' (' + c.ref + ')' : '') + '</span>' +
-                    '<span class="opt-amount ' + (exact ? 'exact' : '') + '">' + formatCurrency(c.amount) + '</span>' +
-                    '<form method="post" action="/reconciliation/match">' +
-                    '<input type="hidden" name="stmt_id" value="' + stmtId + '">' +
-                    '<input type="hidden" name="matched_type" value="' + matchedType + '">' +
-                    '<input type="hidden" name="matched_id" value="' + c.id + '">' +
-                    '<button type="submit" class="btn btn-primary btn-sm">' + (exact ? 'Exact Match' : 'Match') + '</button>' +
-                    '</form></div>';
-            }).join('');
+                const option = el('div', 'match-option');
+                option.appendChild(el('span', 'opt-date', c.date));
+                option.appendChild(el('span', 'opt-info', c.desc + (c.ref ? ' (' + c.ref + ')' : '')));
+                option.appendChild(el('span', 'opt-amount' + (exact ? ' exact' : ''), formatCurrency(c.amount)));
+
+                const form = document.createElement('form');
+                form.method = 'post';
+                form.action = '{{ url_for("reconciliation_match") }}';
+                form.appendChild(hiddenInput('stmt_id', stmtId));
+                form.appendChild(hiddenInput('matched_type', matchedType));
+                form.appendChild(hiddenInput('matched_id', c.id));
+
+                const submit = document.createElement('button');
+                submit.type = 'submit';
+                submit.className = 'btn btn-primary btn-sm';
+                submit.textContent = exact ? 'Exact Match' : 'Match';
+                form.appendChild(submit);
+
+                option.appendChild(form);
+                optionsDiv.appendChild(option);
+            });
         }
 
         matchPanel.style.display = 'block';
